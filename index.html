@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>RiffLens - WAV file inspector</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>&#127908;</text></svg>">
+<style>
+body{margin:0;background:#0d1117;color:#e6edf3;font:16px/1.6 -apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif}
+.wrap{max-width:760px;margin:0 auto;padding:48px 20px}
+h1{font-size:34px;margin:0 0 12px}
+p{color:#8b98a9}
+a.btn{display:inline-block;background:#58a6ff;color:#0d1117;font-weight:600;padding:12px 24px;border-radius:8px;text-decoration:none;margin-top:20px}
+ul{color:#8b98a9}
+</style>
+</head>
+<body>
+<div class="wrap">
+<h1>&#127908; RiffLens</h1>
+<p>Drop any .wav file and see what it actually contains: every RIFF chunk with sizes and offsets, the real format details (PCM 8/16/24/32-bit, IEEE float, extensible), per-channel peak, RMS, DC offset and clipping, LIST INFO metadata, cue points, and a waveform drawn from the decoded samples. Hand-rolled parser, no libraries, nothing leaves your browser.</p>
+<ul>
+<li>Full RIFF chunk walk with pad-byte and truncation handling</li>
+<li>PCM 8/16/24/32 and float 32/64 sample decoding</li>
+<li>Clipping detection and per-channel statistics</li>
+<li>Synthesized demo tones built in-page, then parsed</li>
+<li>209 automated checks against an independent Python oracle, cross-checked with Python's wave module</li>
+</ul>
+<a class="btn" href="app.html">Inspect a WAV</a>
+</div>
+</body>
+</html>
