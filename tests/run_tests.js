@@ -11,7 +11,8 @@ function chk(c, m){ checks++; if (!c) fails.push(m); }
 function close(a, b, tol, m){ chk(Math.abs(a - b) <= tol, m + ` (${a} vs ${b})`); }
 
 for (const e of expected){
-  const bytes = fs.readFileSync(path.join(__dirname, 'corpus', e.name + '.wav'));
+  const b64 = fs.readFileSync(path.join(__dirname, 'corpus', e.name + '.wav.b64'), 'utf8').trim();
+  const bytes = Buffer.from(b64, 'base64');
   const a = R.analyze(new Uint8Array(bytes));
   chk(a.formType === e.formType, `${e.name}: formType`);
   chk(a.riffSize === e.riffSize, `${e.name}: riffSize`);
