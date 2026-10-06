@@ -21,8 +21,9 @@ parser runs entirely in your browser - no libraries, no uploads.
 24-bit, 32-bit float, metadata + odd chunk + cue, clipped, silent, lying RIFF
 size). `tests/oracle.py` parses them with an independent struct-based Python
 parser (cross-checked against Python's `wave` module where applicable).
-`tests/run_tests.js` runs the JS engine on the same files plus six
-buildToneWav roundtrips - **209 checks**.
+`tests/run_tests.js` runs the JS engine on the same files (committed as
+`.wav.b64` base64 mirrors so the binary corpus survives the text-only deploy
+path) plus six buildToneWav roundtrips - **209 checks**.
 
     python3 tests/gen_corpus.py
     python3 tests/oracle.py
