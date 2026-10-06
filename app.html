@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>RiffLens - what your WAV file actually contains</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>&#127908;</text></svg>">
+<style>
+:root{--bg:#0d1117;--panel:#161b22;--panel2:#1c2330;--line:#2d3646;--fg:#e6edf3;--dim:#8b98a9;--ok:#3fb950;--warn:#d29922;--bad:#f85149;--acc:#58a6ff}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--fg);font:15px/1.5 -apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif}
+.wrap{max-width:1020px;margin:0 auto;padding:24px 16px 80px}
+h1{font-size:26px;margin:0 0 4px}
+.sub{color:var(--dim);margin:0 0 18px}
+a{color:var(--acc)}
+label{font-size:12px;text-transform:uppercase;letter-spacing:.06em;color:var(--dim);display:block;margin:0 0 6px}
+.panel{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:16px}
+.drop{border:2px dashed var(--line);border-radius:10px;padding:22px;text-align:center;color:var(--dim);cursor:pointer;transition:border-color .15s}
+.drop:hover,.drop.over{border-color:var(--acc);color:var(--fg)}
+.presets{display:flex;flex-wrap:wrap;gap:6px;margin:12px 0 0}
+button.ghost{background:transparent;color:var(--acc);border:1px solid var(--line);border-radius:8px;padding:6px 10px;font-size:12.5px;cursor:pointer}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-top:16px}
+@media(max-width:820px){.grid{grid-template-columns:1fr}}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:14px 16px}
+.card h3{margin:0 0 8px;font-size:13px;text-transform:uppercase;letter-spacing:.06em;color:var(--dim);font-weight:600}
+.kv{display:grid;grid-template-columns:auto 1fr;gap:3px 14px;font-size:13.5px}
+.kv dt{color:var(--dim)}
+.kv dd{margin:0;font-family:ui-monospace,Menlo,monospace;font-size:12.5px;word-break:break-all}
+table{width:100%;border-collapse:collapse;font-size:12.5px;font-family:ui-monospace,Menlo,monospace}
+td,th{padding:3px 8px;text-align:left;border-bottom:1px solid var(--line)}
+th{color:var(--dim);font-weight:600}
+.badge{display:inline-block;border-radius:20px;padding:2px 10px;font-size:12px;margin:2px 4px 2px 0;border:1px solid var(--line)}
+.badge.warn{color:var(--warn);border-color:var(--warn)}
+.badge.ok{color:var(--ok);border-color:var(--ok)}
+.badge.bad{color:var(--bad);border-color:var(--bad)}
+.big{font-size:20px;font-weight:600;margin:4px 0}
+canvas{width:100%;background:var(--panel2);border-radius:8px;border:1px solid var(--line)}
+.meta{color:var(--dim);font-size:12.5px;margin-top:24px}
+</style>
+</head>
+<body>
+<div class="wrap">
+<h1>&#127908; RiffLens</h1>
+<p class="sub">Drop a .wav file. See its real structure - every RIFF chunk, the format details, per-channel peaks and clipping, metadata - decoded by a hand-rolled parser, verified against an independent Python oracle. <a href="index.html">About</a></p>
+<div class="panel">
+<div class="drop" id="drop">Drop a .wav here, or click to choose<input type="file" id="file" accept=".wav,audio/wav,audio/x-wav" style="display:none"></div>
+<div class="presets" id="presets"></div>
+</div>
+<div id="out"></div>
+<p class="meta">Everything runs in your browser - the file never leaves the page. Presets synthesize real WAV bytes in-page, then parse them. Engine verified on a corpus covering 8/16/24/32-bit PCM, 32-bit float, metadata, cues, odd-sized chunks, clipping and a lying RIFF size field (tests/).</p>
+</div>
+<script src="engine.js?v=377"></script>
+<script>
+var SYNTHS=[
+ ["Sine 440 - 16-bit mono",{freq:440,seconds:1,rate:44100,bits:16,channels:1,type:'sine'}],
+ ["Stereo duet - 8-bit",{freq:440,seconds:0.75,rate:22050,bits:8,channels:2,type:'sine'}],
+ ["Sweep - 24-bit",{freq:220,seconds:0.75,rate:48000,bits:24,channels:1,type:'sweep'}],
+ ["Float 32 - stereo",{freq:330,seconds:0.6,rate:32000,bits:32,channels:2,type:'sine',float:true}],
+ ["Clipped square",{freq:110,seconds:0.6,rate:16000,bits:16,channels:1,type:'clip'}],
+ ["Noise",{freq:1,seconds:0.5,rate:8000,bits:16,channels:1,type:'noise'}]
+];
+(function(){
+"use strict";
+var pr=document.getElementById('presets');
+SYNTHS.forEach(function(p){
+  var b=document.createElement('button'); b.className='ghost'; b.textContent=p[0];
+  b.onclick=function(){ show(RiffLens.analyze(RiffLens.buildToneWav(p[1])), 'synthesized: '+p[0]); };
+  pr.appendChild(b);
+});
+var drop=document.getElementById('drop'), file=document.getElementById('file');
+drop.onclick=function(){file.click();};
+drop.ondragover=function(e){e.preventDefault();drop.classList.add('over');};
+drop.ondragleave=function(){drop.classList.remove('over');};
+drop.ondrop=function(e){e.preventDefault();drop.classList.remove('over'); if(e.dataTransfer.files.length) readFile(e.dataTransfer.files[0]);};
+file.onchange=function(){ if(file.files.length) readFile(file.files[0]); };
+function readFile(f){
+  var r=new FileReader();
+  r.onload=function(){ try{ show(RiffLens.analyze(r.result), f.name); }catch(err){ bad(err.message); } };
+  r.readAsArrayBuffer(f);
+}
+function esc(s){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
+function kv(rows){return '<dl class="kv">'+rows.map(function(r){return '<dt>'+esc(r[0])+'</dt><dd>'+esc(r[1])+'</dd>';}).join('')+'</dl>';}
+function bad(m){ document.getElementById('out').innerHTML='<div class="card" style="margin-top:14px"><div class="big" style="color:var(--bad)">Could not parse</div><p>'+esc(m)+'</p></div>'; }
+function fmtBytes(n){ if(n<1024)return n+' B'; if(n<1048576)return (n/1024).toFixed(1)+' KB'; return (n/1048576).toFixed(2)+' MB'; }
+function drawWave(canvas, samples){
+  var dpr=window.devicePixelRatio||1;
+  var W=canvas.clientWidth||900, H=90*samples.length;
+  canvas.width=W*dpr; canvas.height=H*dpr; canvas.style.height=H+'px';
+  var ctx=canvas.getContext('2d'); ctx.scale(dpr,dpr);
+  ctx.fillStyle='#1c2330'; ctx.fillRect(0,0,W,H);
+  var colors=['#58a6ff','#3fb950','#d29922','#f85149'];
+  samples.forEach(function(s,ch){
+    var top=ch*90, mid=top+45;
+    ctx.strokeStyle='#2d3646'; ctx.beginPath(); ctx.moveTo(0,mid); ctx.lineTo(W,mid); ctx.stroke();
+    ctx.strokeStyle=colors[ch%colors.length]; ctx.lineWidth=1;
+    var n=s.length, per=n/W;
+    ctx.beginPath();
+    for(var x=0;x<W;x++){
+      var lo=1, hi=-1;
+      var start=Math.floor(x*per), end=Math.max(start+1,Math.floor((x+1)*per));
+      for(var i=start;i<end && i<n;i++){ var v=s[i]; if(v<lo)lo=v; if(v>hi)hi=v; }
+      ctx.moveTo(x, mid-hi*42); ctx.lineTo(x, mid-lo*42);
+    }
+    ctx.stroke();
+    ctx.fillStyle='#8b98a9'; ctx.font='10px monospace';
+    ctx.fillText('ch '+ch, 6, top+12);
+  });
+}
+function show(a, name){
+  var out=document.getElementById('out');
+  var warns=a.warnings.map(function(w){return '<span class="badge warn">'+esc(w)+'</span>';}).join('');
+  var head='<div class="card"><h3>'+esc(name)+'</h3>'
+    +(a.fmt?'<div class="big">'+esc(a.fmt.tagName)+' &middot; '+a.fmt.channels+' ch &middot; '+a.fmt.bits+'-bit &middot; '+a.fmt.rate.toLocaleString()+' Hz</div>':'<div class="big">no fmt chunk</div>')
+    +(a.durationSec!==undefined?'<div style="color:var(--dim)">'+a.durationSec.toFixed(3)+' s &middot; '+a.frames.toLocaleString()+' frames &middot; '+fmtBytes(a.fileSize)+'</div>':'')
+    +'<div style="margin-top:6px">'+warns+'</div></div>';
+  var chunkRows=a.chunks.map(function(c){
+    return '<tr><td>'+esc(c.id)+'</td><td>'+c.size.toLocaleString()+'</td><td>0x'+c.offset.toString(16)+'</td><td>'+(c.pad?'pad':'')+(c.truncated?' TRUNCATED':'')+'</td></tr>';
+  }).join('');
+  var chunksCard='<div class="card"><h3>'+a.chunks.length+' chunks - RIFF size field '+a.riffSize.toLocaleString()+'</h3><table><tr><th>id</th><th>size</th><th>offset</th><th></th></tr>'+chunkRows+'</table></div>';
+  var statCard='';
+  if(a.channels){
+    var rows=a.channels.map(function(c,i){
+      return '<tr><td>ch '+i+'</td><td>'+c.peak.toFixed(5)+'</td><td>'+c.rms.toFixed(5)+'</td><td>'+c.dc.toFixed(6)+'</td><td>'+(c.clipped?('<span style="color:var(--bad)">'+c.clipped.toLocaleString()+'</span>'):'0')+'</td></tr>';
+    }).join('');
+    statCard='<div class="card"><h3>Channel stats</h3><table><tr><th></th><th>peak</th><th>rms</th><th>dc offset</th><th>clipped</th></tr>'+rows+'</table>'
+      +(a.channels.some(function(c){return c.clipped;})?'<span class="badge bad">clipping detected</span>':'<span class="badge ok">no clipping</span>')+'</div>';
+  }
+  var waveCard='';
+  if(a._samples){ waveCard='<div class="card"><h3>Waveform</h3><canvas id="wave"></canvas></div>'; }
+  var meta='';
+  if(a.infoNamed && Object.keys(a.infoNamed).length){
+    meta='<div class="card"><h3>Metadata (LIST INFO)</h3>'+kv(Object.keys(a.infoNamed).map(function(k){return [k,a.infoNamed[k]];}))+'</div>';
+  }
+  var cues='';
+  if(a.cuePoints!==undefined){ cues='<div class="card"><h3>Cues</h3>'+kv([['cue points',String(a.cuePoints)]])+'</div>'; }
+  out.innerHTML='<div class="grid">'+head+chunksCard+statCard+waveCard+meta+cues+'</div>';
+  if(a._samples){ drawWave(document.getElementById('wave'), a._samples); }
+}
+show(RiffLens.analyze(RiffLens.buildToneWav(SYNTHS[0][1])), 'synthesized: '+SYNTHS[0][0]);
+})();
+</script>
+</body>
+</html>
